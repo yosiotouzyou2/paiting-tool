@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <title>WebRTCお絵描き共有</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      background: #fafafa;
+      margin: 0;
+      padding: 0;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      touch-action: none;
+      margin-top: 10px;
+    }
+    #qr-area {
+      margin-top: 10px;
+    }
+    textarea {
+      width: 90%;
+      max-width: 400px;
+      height: 100px;
+    }
+    button {
+      margin: 5px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      background: #007bff;
+      color: white;
+      font-size: 15px;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+
+    /* 🎨 カラーパレット */
+    #palette {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 10px auto;
+      width: 250px;
+    }
+    .color {
+      width: 40px;
+      height: 40px;
+      margin: 5px;
+      border-radius: 50%;
+      border: 2px solid #333;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .color:hover {
+      transform: scale(1.1);
+    }
+    .active {
+      border: 3px solid #000;
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+<body>
+  <h2>🎨 something paiting</h2>
+
+  <button id="create-offer">ホスト（QR生成）</button>
+  <button id="scan-offer">ゲスト（QR読み取り）</button>
+
+  <div id="qr-area"></div>
+  <div id="reader" style="width:300px;margin:auto"></div>
+
+  <textarea id="log" readonly></textarea>
+
+    <div id="main-container">
+        <!-- 左：ツール内容 -->
+        <div id="left-panel">
+        <div id="color-panel" class="tool-panel">
+            <h3>色を選択</h3>
+            <div id="color-options">
+            <div class="color" data-color="rgb(0,0,0)" style="background:#000"></div>
+            <div class="color" data-color="rgb(255,255,255)" style="background:#fff"></div>
+            <div class="color" data-color="rgb(255,0,0)" style="background:#f00"></div>
+            <div class="color" data-color="rgb(0,255,0)" style="background:#0f0"></div>
+            <div class="color" data-color="rgb(0,0,255)" style="background:#00f"></div>
+            <div class="color" data-color="rgb(255,255,0)" style="background:#ff0"></div>
+            <div class="color" data-color="rgb(255,0,255)" style="background:#f0f"></div>
+            <div class="color" data-color="rgb(0,255,255)" style="background:#0ff"></div>
+            </div>
+
+            <h3>RGB設定</h3>
+            <input type="text" id="rgb-input" value="0,0,0" placeholder="R,G,B">
+            <div class="color-preview" id="color-preview" style="width:40px; height:40px; border:1px solid #000;"></div>
+
+
+            <h3>カラーピッカー</h3>
+            <div id="color-picker-container">
+                <input type="color" id="color-picker" value="#000000">
+                <div id="color-history" style="margin-top:5px; display:flex; flex-wrap:wrap;"></div>
+            </div>
+        </div>
+
+
+        <div id="size-panel" class="tool-panel hidden">
+            <h3>太さを変更</h3>
+            <input type="range" id="size-slider" min="1" max="30" value="5">
+            <span id="size-value">1.00</span>
+        </div>
+
+        <div id="alpha-panel" class="tool-panel hidden">
+            <h3>透明度を変更</h3>
+            <input type="range" id="alpha-slider" min="0" max="1" step="0.01" value="1">
+            <span id="alpha-value">1.00</span>
+        </div>
+
+        <div id="eraser-panel" class="tool-panel hidden">
+            <label>消しゴムサイズ：</label>
+            <input type="range" id="eraser-slider" min="1" max="100" step="1" value="10">
+            <span id="eraser-value">10</span>
+            <div id="eraser-preview" style="
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                border: 1px solid #444;
+                background: rgba(200,200,200,0.5);
+                margin-top: 6px;
+            "></div>
+            <h5>※この画面を開いているときは消しゴムモードになります</h5>
+            <button id="all-delete">すべて消す</button>
+            <h5>※今のレイヤーに書かれたものしか消えないです</h5>
+        </div>
+
+        <div id="layer-panel" class="tool-panel hidden">
+            <h3>レイヤー操作</h3>
+            <button id="add-layer-btn">レイヤー追加</button>
+            <button id="delete-layer-btn">レイヤー削除</button>
+            <button id="layer-up">↑ 上へ</button>
+            <button id="layer-down">↓ 下へ</button>
+            <div id="layer-thumbnails" style="display:flex;flex-wrap:wrap;justify-content:center;margin:10px;"></div>
+
+        </div>
+
+        <div id="save-panel" class="tool-panel hidden">
+            <h3>画像を保存</h3>
+            <button id="save-image-btn">PNGで保存する</button>
+        </div>
+
+        <div id="setting-panel" class="tool-panel hidden">
+            <h3>設定</h3>
+            <button id="setting-on">ペンの色やサイズも同期する</button>
+            <button id="setting-off">ペンの色やサイズも同期しない</button>
+        </div>
+        </div>
+
+        <!-- 中央：パレット -->
+        <canvas id="canvas" width="620" height="620"></canvas>
+
+        <!-- 右：モード切り替え -->
+        <div id="right-panel">
+        <button class="tool-btn" data-tool="color" onclick="setTool('pen')">色</button>
+        <button class="tool-btn" data-tool="size" onclick="setTool('pen')">太さ</button>
+        <button class="tool-btn" data-tool="alpha" >透明度</button>
+        <button class="tool-btn" data-tool="eraser" onclick="setTool('eraser')">消しゴム</button>
+        <button class="tool-btn" data-tool="layer">レイヤー</button>
+        <button class="tool-btn" data-tool="save">画像を保存</button>
+        <button class="tool-btn" data-tool="setting">設定</button>
+
+        </div>
+        </div>
+    </div>
+    </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
