@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebRTC接続テスト</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.9/minified/html5-qrcode.min.js" defer></script>
+</head>
+<body>
+<h2>WebRTC接続テスト</h2>
+
+<button id="create-offer">ホスト (QR生成)</button>
+<button id="scan-offer">ゲスト (QR読み取り)</button>
+
+<div id="qr-area"></div>
+<div id="reader" style="width:300px;height:300px;margin:auto;"></div>
+<textarea id="log" readonly style="width:90%;height:150px;"></textarea>
+
+<script>
+let pc, dataChannel, html5QrCode;
+
+function log(msg){
+  const box=document.getElementById("log");
+  box.value+=msg+"\n";
+  box.scrollTop=box.scrollHeight;
+}
+
+function initPeerConnection(){
+  pc = new RTCPeerConnection();
+
+  pc.onicecandidate = (e)=>{
+    if(e.candidate===null) log("✅ ICE gathering 完了");
+  };
+
+  pc.ondatachannel = (event)=>{
+    dataChannel = event.channel;
+    setupDataChannel();
+  };
+}
+
+function setupDataChannel(){
+  dataChannel.onopen = ()=>log("🔗 DataChannel オープン");
+  dataChannel.onmessage = (e)=>log("📨 受信: "+e.data);
+  dataChannel.onclose = ()=>log("❌ DataChannel クローズ");
+}
+
+// Offer作成
+async function createOffer(){
+  initPeerConnection();
+  dataChannel = pc.createDataChannel("test");
+  setupDataChannel();
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  displayQr(JSON.stringify(pc.localDescription));
+  log("📤 Offerを生成しました");
+}
+
+// QR表示
+function displayQr(text){
+  const area=document.getElementById("qr-area");
+  area.innerHTML="";
+  const canvasQR=document.createElement("canvas");
+  area.appendChild(canvasQR);
+  QRCode.toCanvas(canvasQR,text,{width:300});
+  canvasQR.addEventListener("click", async ()=>{
+    const answerText=prompt("相手からもらったQRテキストを貼ってください:");
+    if(answerText) await applyAnswer(answerText);
+  });
+}
+
+// QR読み取り
+async function scanOffer(){
+  const readerDiv=document.getElementById("reader");
+  readerDiv.style.display="block";
+  html5QrCode = new Html5Qrcode("reader");
+  await html5QrCode.start({facingMode:"environment"}, {}, async (text)=>{
+    log("📷 QR読み取り成功");
+    await html5QrCode.stop();
+    document.getElementById("reader").innerHTML="";
+    const offer=JSON.parse(text);
+    await createAnswer(offer);
+  });
+}
+
+// Answer作成
+async function createAnswer(offer){
+  initPeerConnection();
+  await pc.setRemoteDescription(offer);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  displayQr(JSON.stringify(pc.localDescription));
+  log("📤 Answerを生成しました");
+}
+
+// Answer適用
+async function applyAnswer(answerText){
+  const answer=JSON.parse(answerText);
+  await pc.setRemoteDescription(answer);
+  log("✅ 接続完了！");
+}
+
+document.getElementById("create-offer").addEventListener("click",createOffer);
+document.getElementById("scan-offer").addEventListener("click",scanOffer);
+</script>
+</body>
+</html>
