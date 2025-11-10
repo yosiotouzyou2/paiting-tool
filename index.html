@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR読み取りテスト</title>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
+</head>
+<body>
+<h2>QR読み取りテスト</h2>
+
+<button id="start-scan">カメラ起動してQRを読み取る</button>
+<div id="reader" style="width:300px;height:300px;margin:auto;"></div>
+<textarea id="log" readonly style="width:90%;height:150px;"></textarea>
+
+<script>
+const logBox = document.getElementById("log");
+let html5QrCode;
+
+function log(msg){
+  logBox.value += msg + "\n";
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+document.getElementById("start-scan").addEventListener("click", async () => {
+  const readerDiv = document.getElementById("reader");
+  readerDiv.style.display = "block";
+
+  html5QrCode = new Html5Qrcode("reader");
+
+  try {
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 250 },
+      (decodedText, decodedResult) => {
+        log("📷 読み取り成功: " + decodedText);
+        html5QrCode.stop();
+        readerDiv.innerHTML = "";
+      }
+    );
+  } catch (err) {
+    log("❌ エラー: " + err);
+  }
+});
+</script>
+</body>
+</html>
